@@ -33,19 +33,17 @@ GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 def csv_env(name: str) -> list[str]:
     return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
 
+ALLOWED_HOSTS = [
+    'code-review-tau-ebon.vercel.app',
+    '.vercel.app', 
+    'localhost', 
+    '127.0.0.1'
+]
 
-ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS")
-if not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
-
-ALLOWED_HOSTS.extend([".vercel.app", ".now.sh"])
-vercel_url = os.environ.get("VERCEL_URL", "").strip()
-if vercel_url:
-    ALLOWED_HOSTS.append(vercel_url)
-
-CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS")
-if vercel_url:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{vercel_url}")
+# If you have CSRF trusted origins set up, update that too:
+CSRF_TRUSTED_ORIGINS = [
+    'https://code-review-tau-ebon.vercel.app'
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
