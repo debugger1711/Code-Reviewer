@@ -108,7 +108,7 @@ if DATABASE_URL:
             "PASSWORD": db_parsed.password,
             "HOST": db_parsed.hostname,
             "PORT": db_parsed.port or 5432,
-            "CONN_MAX_AGE": 600,
+            "CONN_MAX_AGE": 0,
             "OPTIONS": {
                 "sslmode": "require",
             },
