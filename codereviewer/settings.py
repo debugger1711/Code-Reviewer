@@ -151,10 +151,8 @@ SOCIALACCOUNT_AUTO_SIGNUP = True
 # Google OAuth Provider Settings
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
-        "APP": {
-            "client_id": os.environ.get("GOOGLE_OAUTH_CLIENT_ID", ""),
-            "secret": os.environ.get("GOOGLE_OAUTH_SECRET", ""),
-        },
+        # Keep Google OAuth credentials in the SocialApp table only.
+        # Defining an APP here as well makes allauth see multiple apps.
         "SCOPE": [
             "profile",
             "email",
