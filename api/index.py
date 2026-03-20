@@ -1,10 +1,8 @@
-from pathlib import Path
-import sys
+import os
+from django.core.wsgi import get_wsgi_application
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+# Ensure this points to your project's settings
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "codereviewer.settings")
 
-from codereviewer.wsgi import application
-
-app = application
+# Vercel requires the variable to be named 'app'
+app = get_wsgi_application()

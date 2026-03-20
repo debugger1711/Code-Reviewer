@@ -1,18 +1,19 @@
 {
-  "buildCommand": "python manage.py migrate --noinput && python manage.py collectstatic --noinput",
+  "version": 2,
   "builds": [
     {
       "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxDuration": 60
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
+      "src": "/static/(.*)",
+      "dest": "/static/$1"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/api/index.py"
+      "dest": "api/index.py"
     }
   ]
 }
