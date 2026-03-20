@@ -5,3 +5,4 @@ psycopg2-binary>=2.9.0
 django-allauth>=0.57.0
 google-auth-oauthlib>=1.0.0
 google-auth>=2.0.0
+whitenoise>=6.7.0
