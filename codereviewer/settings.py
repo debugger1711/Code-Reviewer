@@ -26,6 +26,8 @@ load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
 DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 
 
 def csv_env(name: str) -> list[str]:
@@ -160,6 +162,7 @@ TERMINAL_TIMEOUT_SECONDS = int(os.environ.get("TERMINAL_TIMEOUT_SECONDS", "5"))
 
 # Django-Allauth Configuration
 SITE_ID = 1
+SOCIALACCOUNT_ADAPTER = "reviewer.adapters.CodeReviewerSocialAccountAdapter"
 
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -178,8 +181,26 @@ SOCIALACCOUNT_AUTO_SIGNUP = True
 # Google OAuth Provider Settings
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
-        # Keep Google OAuth credentials in the SocialApp table only.
-        # Defining an APP here as well makes allauth see multiple apps.
+        "APPS": (
+            [
+                {
+                    "client_id": GOOGLE_OAUTH_CLIENT_ID,
+                    "secret": GOOGLE_OAUTH_SECRET,
+                    "key": "",
+                    "settings": {
+                        "scope": [
+                            "profile",
+                            "email",
+                        ],
+                        "auth_params": {
+                            "access_type": "online",
+                        },
+                    },
+                }
+            ]
+            if GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_SECRET
+            else []
+        ),
         "SCOPE": [
             "profile",
             "email",
@@ -187,6 +208,7 @@ SOCIALACCOUNT_PROVIDERS = {
         "AUTH_PARAMS": {
             "access_type": "online",
         },
+        "FETCH_USERINFO": True,
         "VERIFIED_EMAIL": True,
         "VERSION": "v2",
     }
