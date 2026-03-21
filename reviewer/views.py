@@ -19,6 +19,23 @@ from .pdf_utils import build_pdf_report
 from .services import ReviewService
 
 
+def _get_safe_auth_snapshot(request: HttpRequest) -> dict[str, str | bool]:
+    try:
+        user = request.user
+        if getattr(user, "is_authenticated", False):
+            return {
+                "is_user_authenticated": True,
+                "auth_user_email": getattr(user, "email", "") or "",
+            }
+    except Exception:
+        pass
+
+    return {
+        "is_user_authenticated": False,
+        "auth_user_email": "",
+    }
+
+
 def _load_json_payload(request: HttpRequest) -> tuple[dict | None, JsonResponse | None]:
     try:
         raw_body = request.body
@@ -48,6 +65,7 @@ def index(request: HttpRequest) -> HttpResponse:
         {
             "models": settings.GEMINI_MODELS,
             "default_model": settings.GEMINI_DEFAULT_MODEL,
+            **_get_safe_auth_snapshot(request),
         },
     )
 

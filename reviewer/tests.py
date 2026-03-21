@@ -22,6 +22,16 @@ class ReviewerViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Code Reviewer")
 
+    def test_safe_auth_snapshot_handles_user_resolution_failure(self) -> None:
+        class BrokenRequest:
+            @property
+            def user(self):
+                raise Exception("db down")
+
+        snapshot = views._get_safe_auth_snapshot(BrokenRequest())
+        self.assertEqual(snapshot["is_user_authenticated"], False)
+        self.assertEqual(snapshot["auth_user_email"], "")
+
     def test_account_login_page_uses_custom_theme(self) -> None:
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)

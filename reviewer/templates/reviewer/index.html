@@ -17,9 +17,9 @@
                 </p>
             </div>
             <div class="auth-section">
-                {% if user.is_authenticated %}
+                {% if is_user_authenticated %}
                     <div class="user-info">
-                        <span class="welcome-text">👤 {{ user.email }}</span>
+                        <span class="welcome-text">👤 {{ auth_user_email }}</span>
                         <a href="{% url 'account_logout' %}" class="auth-btn logout-btn">Logout</a>
                     </div>
                 {% else %}
