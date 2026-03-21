@@ -24,8 +24,9 @@ def load_dotenv(dotenv_path: Path) -> None:
 
 load_dotenv(BASE_DIR / ".env")
 
+ON_VERCEL = os.environ.get("VERCEL", "").lower() in {"1", "true"} or bool(os.environ.get("VERCEL_ENV"))
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-secret-key")
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+DEBUG = False if ON_VERCEL else os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 
@@ -92,12 +93,12 @@ WSGI_APPLICATION = "codereviewer.wsgi.application"
 ASGI_APPLICATION = "codereviewer.asgi.application"
 
 # Database Configuration:
-# - Production defaults to DATABASE_URL when DEBUG is false
+# - Vercel/deployed environments prefer DATABASE_URL automatically
 # - Local development defaults to SQLite unless DJANGO_USE_REMOTE_DB=true
 DATABASE_URL = os.environ.get("DATABASE_URL")
-USE_REMOTE_DATABASE = os.environ.get("DJANGO_USE_REMOTE_DB", "false").lower() == "true"
+USE_REMOTE_DATABASE = os.environ.get("DJANGO_USE_REMOTE_DB", "true" if ON_VERCEL else "false").lower() == "true"
 
-if DATABASE_URL and (not DEBUG or USE_REMOTE_DATABASE):
+if DATABASE_URL and (ON_VERCEL or not DEBUG or USE_REMOTE_DATABASE):
     # PostgreSQL (Neon) Configuration
     db_parsed = urlparse(DATABASE_URL)
     DATABASES = {
