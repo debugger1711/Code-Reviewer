@@ -1,0 +1,22 @@
+{% extends "account/base_manage.html" %}
+
+{% block head_title %}Sign Out{% endblock %}
+
+{% block content %}
+    <div class="auth-stack auth-stack-tight">
+        <span class="auth-badge">Session</span>
+        <h2 class="auth-section-title">Sign Out</h2>
+        <p class="auth-copy">Are you sure you want to sign out of Code Reviewer Studio?</p>
+
+        <form method="post" action="{% url 'account_logout' %}" class="auth-form">
+            {% csrf_token %}
+            {% if redirect_field_value %}
+                <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+            {% endif %}
+            <div class="auth-inline-actions">
+                <button type="submit" class="auth-btn auth-btn-primary">Sign Out</button>
+                <a href="/" class="auth-btn auth-btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

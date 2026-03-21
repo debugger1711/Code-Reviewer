@@ -1,0 +1,47 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block head_title %}Account{% endblock %} | Code Reviewer Studio</title>
+    <link rel="stylesheet" href="{% static 'reviewer/auth.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <main class="auth-page auth-page-manage">
+        <a href="/" class="auth-brand">Code Reviewer Studio</a>
+
+        <section class="auth-card auth-card-manage">
+            <div class="auth-manage-grid">
+                <aside class="auth-sidebar">
+                    <span class="auth-badge">Account</span>
+                    <h1 class="auth-title auth-title-small">Manage Account</h1>
+                    <p class="auth-copy auth-copy-sidebar">
+                        Keep your sign-in details and connected account settings in one place.
+                    </p>
+
+                    <nav class="auth-menu">
+                        <a href="{% url 'account_email' %}" class="auth-menu-link">Change Email</a>
+                        <a href="{% url 'account_change_password' %}" class="auth-menu-link">Change Password</a>
+                        <a href="{% url 'socialaccount_connections' %}" class="auth-menu-link">Account Connections</a>
+                        <a href="{% url 'account_logout' %}" class="auth-menu-link auth-menu-link-danger">Sign Out</a>
+                    </nav>
+                </aside>
+
+                <section class="auth-surface">
+                    {% if messages %}
+                        <div class="auth-messages">
+                            {% for message in messages %}
+                                <p class="auth-message">{{ message }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% block content %}{% endblock %}
+                </section>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

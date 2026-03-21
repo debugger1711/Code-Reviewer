@@ -1,0 +1,45 @@
+{% load static socialaccount %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In | Code Reviewer Studio</title>
+    <link rel="stylesheet" href="{% static 'reviewer/auth.css' %}">
+</head>
+<body>
+    <main class="auth-page">
+        <a href="/" class="auth-brand">Code Reviewer Studio</a>
+
+        <section class="auth-card auth-card-wide">
+            <span class="auth-badge">Secure Login</span>
+            <h1 class="auth-title">Continue With Google</h1>
+            <p class="auth-copy">
+                Sign in to access your saved code reviews, chat history, and PDF reports in one place.
+            </p>
+
+            {% if messages %}
+                <div class="auth-messages">
+                    {% for message in messages %}
+                        <p class="auth-message">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            {% if user.is_authenticated %}
+                <div class="auth-stack">
+                    <p class="auth-copy auth-copy-tight">You are already signed in as {{ user.email }}.</p>
+                    <a href="/" class="auth-btn auth-btn-primary">Open Workspace</a>
+                </div>
+            {% else %}
+                <div class="auth-stack">
+                    <a href="{% provider_login_url 'google' process='login' %}" class="auth-btn auth-btn-primary">
+                        Continue With Google
+                    </a>
+                    <p class="auth-footnote">Your reviews and reports stay linked to your Google account.</p>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

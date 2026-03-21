@@ -9,6 +9,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_POST
@@ -16,6 +17,27 @@ from django.views.decorators.http import require_GET, require_POST
 from .models import ChatMessage, CodeSubmission, ReviewReport
 from .pdf_utils import build_pdf_report
 from .services import ReviewService
+
+
+def _load_json_payload(request: HttpRequest) -> tuple[dict | None, JsonResponse | None]:
+    try:
+        raw_body = request.body
+    except RequestDataTooBig:
+        limit_mb = max(1, settings.DATA_UPLOAD_MAX_MEMORY_SIZE // (1024 * 1024))
+        return None, JsonResponse(
+            {
+                "error": (
+                    f"Request is too large for the server limit. Keep code plus chat under about {limit_mb} MB, "
+                    "or clear previous chat history and try again."
+                )
+            },
+            status=413,
+        )
+
+    try:
+        return json.loads(raw_body.decode("utf-8")), None
+    except json.JSONDecodeError:
+        return None, JsonResponse({"error": "Invalid JSON payload."}, status=400)
 
 
 @require_GET
@@ -26,17 +48,15 @@ def index(request: HttpRequest) -> HttpResponse:
         {
             "models": settings.GEMINI_MODELS,
             "default_model": settings.GEMINI_DEFAULT_MODEL,
-            "languages": settings.SUPPORTED_LANGUAGES,
         },
     )
 
 
 @require_POST
 def review_code(request: HttpRequest) -> JsonResponse:
-    try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+    payload, error_response = _load_json_payload(request)
+    if error_response:
+        return error_response
 
     code = payload.get("code", "").strip()
     if not code:
@@ -96,10 +116,9 @@ def review_code(request: HttpRequest) -> JsonResponse:
 
 @require_POST
 def run_code(request: HttpRequest) -> JsonResponse:
-    try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+    payload, error_response = _load_json_payload(request)
+    if error_response:
+        return error_response
 
     language = payload.get("language", "python")
     code = payload.get("code", "").strip()
@@ -158,10 +177,9 @@ def run_code(request: HttpRequest) -> JsonResponse:
 
 @require_POST
 def download_pdf(request: HttpRequest) -> HttpResponse:
-    try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON payload."}, status=400)
+    payload, error_response = _load_json_payload(request)
+    if error_response:
+        return error_response
 
     answer = payload.get("answer", "").strip()
     if not answer:

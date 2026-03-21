@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from textwrap import wrap
 from io import BytesIO
 from xml.sax.saxutils import escape
 
@@ -14,7 +15,7 @@ def build_pdf_report(*, title: str, action: str, language: str, answer: str, cod
         from reportlab.lib.units import mm
         from reportlab.platypus import ListFlowable, ListItem, Paragraph, Preformatted, SimpleDocTemplate, Spacer, Table, TableStyle
     except ImportError as exc:
-        raise RuntimeError("The reportlab package is not installed. Install the requirements first.") from exc
+        return _build_basic_pdf_report(title=title, action=action, language=language, answer=answer, code=code)
 
     buffer = BytesIO()
     document = SimpleDocTemplate(
@@ -273,3 +274,169 @@ def _normalize_answer_text(answer: str) -> str:
     trimmed = answer.strip()
     match = re.match(r"^```(?:markdown|md)?\n([\s\S]*?)\n```$", trimmed, flags=re.IGNORECASE)
     return match.group(1).strip() if match else answer
+
+
+def _build_basic_pdf_report(*, title: str, action: str, language: str, answer: str, code: str) -> bytes:
+    lines: list[str] = [
+        "AI Code Review Report",
+        title,
+        "",
+        f"Action: {action}",
+        f"Language: {language}",
+        "",
+        "Detailed Review",
+    ]
+    lines.extend(_markdown_to_plain_lines(_normalize_answer_text(answer)))
+    lines.extend(["", "Submitted Code"])
+    lines.extend((code or "No code provided.").replace("\r\n", "\n").split("\n"))
+    wrapped_lines = _wrap_pdf_lines(lines)
+    return _render_basic_pdf(wrapped_lines)
+
+
+def _markdown_to_plain_lines(answer: str) -> list[str]:
+    lines: list[str] = []
+    in_code = False
+    code_language = ""
+
+    for raw_line in answer.replace("\r\n", "\n").split("\n"):
+        stripped = raw_line.strip()
+        if stripped.startswith("```"):
+            if in_code:
+                lines.append("")
+                in_code = False
+                code_language = ""
+            else:
+                code_language = stripped.replace("```", "", 1).strip() or "code"
+                lines.append(f"[{code_language}]")
+                in_code = True
+            continue
+
+        if in_code:
+            lines.append(f"    {raw_line}")
+            continue
+
+        if re.match(r"^#{2,4}\s+", stripped):
+            lines.append(re.sub(r"^#{2,4}\s+", "", stripped).strip())
+            continue
+
+        if re.match(r"^[-*]\s+", stripped):
+            lines.append(f"- {re.sub(r'^[-*]\s+', '', stripped)}")
+            continue
+
+        if re.match(r"^\d+\.\s+", stripped):
+            lines.append(re.sub(r"^\d+\.\s+", "- ", stripped))
+            continue
+
+        lines.append(raw_line)
+
+    return lines
+
+
+def _wrap_pdf_lines(lines: list[str], width: int = 92) -> list[str]:
+    wrapped: list[str] = []
+    for line in lines:
+        if not line.strip():
+            wrapped.append("")
+            continue
+
+        indent = len(line) - len(line.lstrip(" "))
+        prefix = " " * indent
+        chunks = wrap(line.strip(), width=max(20, width - indent), replace_whitespace=False, drop_whitespace=False)
+        if not chunks:
+            wrapped.append(prefix)
+            continue
+        wrapped.extend(f"{prefix}{chunk}" for chunk in chunks)
+    return wrapped
+
+
+def _render_basic_pdf(lines: list[str]) -> bytes:
+    page_width = 595
+    page_height = 842
+    margin_x = 42
+    margin_top = 48
+    margin_bottom = 48
+    font_size = 11
+    leading = 15
+    usable_height = page_height - margin_top - margin_bottom
+    lines_per_page = max(1, usable_height // leading)
+    pages = [lines[index:index + lines_per_page] for index in range(0, max(len(lines), 1), lines_per_page)] or [[]]
+
+    objects: list[bytes] = []
+
+    def reserve_object() -> int:
+        objects.append(b"")
+        return len(objects)
+
+    def set_object(object_id: int, data: bytes) -> None:
+        objects[object_id - 1] = data
+
+    font_id = reserve_object()
+    pages_id = reserve_object()
+    set_object(font_id, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+
+    page_ids: list[int] = []
+    for page_lines in pages:
+        content_id = reserve_object()
+        page_id = reserve_object()
+        stream = _build_pdf_text_stream(page_lines, margin_x=margin_x, top_y=page_height - margin_top, font_size=font_size, leading=leading)
+        set_object(content_id, b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream")
+        set_object(
+            page_id,
+            (
+                f"<< /Type /Page /Parent {pages_id} 0 R /MediaBox [0 0 {page_width} {page_height}] "
+                f"/Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>"
+            ).encode("ascii"),
+        )
+        page_ids.append(page_id)
+
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    set_object(pages_id, f"<< /Type /Pages /Kids [{kids}] /Count {len(page_ids)} >>".encode("ascii"))
+
+    catalog_id = reserve_object()
+    set_object(catalog_id, f"<< /Type /Catalog /Pages {pages_id} 0 R >>".encode("ascii"))
+
+    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, data in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{index} 0 obj\n".encode("ascii"))
+        output.extend(data)
+        output.extend(b"\nendobj\n")
+
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        (
+            f"trailer\n<< /Size {len(objects) + 1} /Root {catalog_id} 0 R >>\n"
+            f"startxref\n{xref_offset}\n%%EOF"
+        ).encode("ascii")
+    )
+    return bytes(output)
+
+
+def _build_pdf_text_stream(lines: list[str], *, margin_x: int, top_y: int, font_size: int, leading: int) -> bytes:
+    sanitized_lines = [_pdf_escape_text(line) for line in lines] or [""]
+    commands = [
+        "BT",
+        f"/F1 {font_size} Tf",
+        f"{leading} TL",
+        f"{margin_x} {top_y} Td",
+    ]
+    first = True
+    for line in sanitized_lines:
+        if first:
+            commands.append(f"({line}) Tj")
+            first = False
+            continue
+        commands.append("T*")
+        commands.append(f"({line}) Tj")
+    commands.append("ET")
+    return "\n".join(commands).encode("latin-1", "replace")
+
+
+def _pdf_escape_text(value: str) -> str:
+    text = value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return text.encode("latin-1", "replace").decode("latin-1")

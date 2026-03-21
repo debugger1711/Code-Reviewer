@@ -10,32 +10,29 @@
 <body>
     <div class="page-shell">
         <header class="hero-bar">
-            <div>
-                <p class="eyebrow">✨ Third Year Project</p>
-                <h1>Code Reviewer Studio</h1>
-            </div>
-            <div class="header-content">
+            <div class="hero-main">
+                <h1 class="hero-title">Code Reviewer Studio</h1>
                 <p class="hero-copy">
                     Analyze code, ask AI questions, detect bugs, and generate comprehensive PDF reports with a modern interface.
                 </p>
-                <div class="auth-section">
-                    {% if user.is_authenticated %}
-                        <div class="user-info">
-                            <span class="welcome-text">👤 {{ user.email }}</span>
-                            <a href="{% url 'account_logout' %}" class="auth-btn logout-btn">Logout</a>
-                        </div>
-                    {% else %}
-                        <a href="/accounts/google/login/" class="auth-btn login-btn">🔐 Sign in with Google</a>
-                    {% endif %}
-                </div>
+            </div>
+            <div class="auth-section">
+                {% if user.is_authenticated %}
+                    <div class="user-info">
+                        <span class="welcome-text">👤 {{ user.email }}</span>
+                        <a href="{% url 'account_logout' %}" class="auth-btn logout-btn">Logout</a>
+                    </div>
+                {% else %}
+                    <a href="/accounts/login/" class="auth-btn login-btn">🔐 Sign in with Google</a>
+                {% endif %}
             </div>
         </header>
 
         <main class="workspace" data-side-view="reply">
             <aside class="chat-panel panel">
-                <div class="panel-head">
-                    <h2>AI Chat Assistant</h2>
-                    <span class="panel-chip">Powered by Gemini</span>
+                <div class="panel-head chat-panel-head">
+                    <h2 class="chat-panel-title">AI Chat Assistant</h2>
+                    <span class="panel-chip chat-panel-chip">Powered by Gemini</span>
                 </div>
 
                 <label class="field">
@@ -47,34 +44,16 @@
                     </select>
                 </label>
 
-                <label class="field">
-                    <span>Language</span>
-                    <select id="languageSelect">
-                        {% for value, label in languages %}
-                            <option value="{{ value }}">{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-
-                <section class="quick-actions">
-                    <p>Quick Actions</p>
-                    <div class="action-grid">
-                        <button class="action-btn active" data-action="chat" type="button">💬 Ask AI</button>
-                        <button class="action-btn" data-action="find_error" type="button">🐛 Find Error</button>
-                        <button class="action-btn" data-action="create_report" type="button">📋 Report</button>
-                    </div>
-                </section>
-
                 <section class="chat-history" id="chatHistory">
                     <article class="message assistant">
                         <h3>CodeBuddy</h3>
-                        <p>Start with a question or click <strong>Create Report</strong> for a comprehensive analysis using Gemini.</p>
+                        <p>Start with a direct prompt like <strong>fix this bug</strong>, <strong>convert it to C++</strong>, or <strong>give full code</strong>.</p>
                     </article>
                 </section>
 
                 <label class="field prompt-field">
                     <span>Your Message</span>
-                    <textarea id="promptInput" rows="3" placeholder="Example: Explain where the bug is and suggest a fix."></textarea>
+                    <textarea id="promptInput" rows="3" placeholder="Example: Explain the bug simply and give the full corrected code."></textarea>
                 </label>
 
                 <div class="panel-actions">
@@ -126,19 +105,19 @@ print(find_max([-3, -7, -1]))</textarea>
                     <div class="reply-preview empty" id="replyPreview">
                         <div class="empty-state">
                             <h3>No Response Yet</h3>
-                            <p>Send a message or generate a report to see the formatted response here.</p>
+                            <p>Send a message and the AI reply will appear here.</p>
                         </div>
                     </div>
                 </section>
 
                 <section class="side-view side-view-terminal" id="terminalView" hidden>
                     <p class="terminal-note">
-                        ⚙️ Runs Python directly. JavaScript requires <code>node</code> installed.
+                        Run code directly and inspect the output here.
                     </p>
 
                     <div class="terminal-actions">
-                        <button id="runBtn" class="primary-btn" type="button">▶️ Run</button>
-                        <button id="clearTerminalBtn" class="secondary-btn" type="button">🧹 Clear</button>
+                        <button id="runBtn" class="primary-btn" type="button">Run Code</button>
+                        <button id="clearTerminalBtn" class="secondary-btn" type="button">Clear Output</button>
                     </div>
 
                     <pre class="terminal-output" id="terminalOutput">Terminal ready.</pre>

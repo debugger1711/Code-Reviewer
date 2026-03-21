@@ -1,0 +1,41 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continue Sign In | Code Reviewer Studio</title>
+    <link rel="stylesheet" href="{% static 'reviewer/auth.css' %}">
+</head>
+<body>
+    <main class="auth-page">
+        <a href="/" class="auth-brand">Code Reviewer Studio</a>
+
+        <section class="auth-card">
+            <span class="auth-badge">Account Access</span>
+            <h1 class="auth-title">Continue To {{ provider.name }}</h1>
+            <p class="auth-copy">
+                Confirm your sign-in to continue into Code Reviewer Studio with your {{ provider.name }} account.
+            </p>
+
+            {% if messages %}
+                <div class="auth-messages">
+                    {% for message in messages %}
+                        <p class="auth-message">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form method="post" class="auth-form">
+                {% csrf_token %}
+                {% if redirect_field_value %}
+                    <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+                {% endif %}
+                <button type="submit" class="auth-btn auth-btn-primary">Continue With {{ provider.name }}</button>
+            </form>
+
+            <a href="/accounts/login/" class="auth-link">Back to login</a>
+        </section>
+    </main>
+</body>
+</html>

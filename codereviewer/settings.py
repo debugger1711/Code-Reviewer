@@ -33,16 +33,15 @@ GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 def csv_env(name: str) -> list[str]:
     return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
 
-ALLOWED_HOSTS = [
-    'code-review-tau-ebon.vercel.app',
-    '.vercel.app', 
-    'localhost', 
-    '127.0.0.1'
+ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS") or [
+    "code-review-tau-ebon.vercel.app",
+    ".vercel.app",
+    "localhost",
+    "127.0.0.1",
 ]
 
-# If you have CSRF trusted origins set up, update that too:
-CSRF_TRUSTED_ORIGINS = [
-    'https://code-review-tau-ebon.vercel.app'
+CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS") or [
+    "https://code-review-tau-ebon.vercel.app",
 ]
 
 INSTALLED_APPS = [
@@ -53,11 +52,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.sites",
+    "reviewer",
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
-    "reviewer",
 ]
 
 MIDDLEWARE = [
@@ -92,10 +91,13 @@ TEMPLATES = [
 WSGI_APPLICATION = "codereviewer.wsgi.application"
 ASGI_APPLICATION = "codereviewer.asgi.application"
 
-# Database Configuration: Use Neon (PostgreSQL) if DATABASE_URL is provided, else SQLite3
+# Database Configuration:
+# - Production defaults to DATABASE_URL when DEBUG is false
+# - Local development defaults to SQLite unless DJANGO_USE_REMOTE_DB=true
 DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_REMOTE_DATABASE = os.environ.get("DJANGO_USE_REMOTE_DB", "false").lower() == "true"
 
-if DATABASE_URL:
+if DATABASE_URL and (not DEBUG or USE_REMOTE_DATABASE):
     # PostgreSQL (Neon) Configuration
     db_parsed = urlparse(DATABASE_URL)
     DATABASES = {
@@ -157,6 +159,9 @@ SUPPORTED_LANGUAGES = [
     ("java", "Java"),
 ]
 TERMINAL_TIMEOUT_SECONDS = int(os.environ.get("TERMINAL_TIMEOUT_SECONDS", "5"))
+MAX_REVIEW_REQUEST_BYTES = int(os.environ.get("MAX_REVIEW_REQUEST_BYTES", str(10 * 1024 * 1024)))
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_REVIEW_REQUEST_BYTES
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_REVIEW_REQUEST_BYTES
 
 # Django-Allauth Configuration
 SITE_ID = 1

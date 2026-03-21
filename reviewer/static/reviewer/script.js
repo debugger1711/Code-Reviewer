@@ -1,5 +1,4 @@
 const state = {
-    action: "chat",
     lastAnswer: "",
     lastWarning: "",
     lastModel: "",
@@ -10,7 +9,6 @@ const state = {
 const codeEditor = document.getElementById("codeEditor");
 const promptInput = document.getElementById("promptInput");
 const modelSelect = document.getElementById("modelSelect");
-const languageSelect = document.getElementById("languageSelect");
 const chatHistory = document.getElementById("chatHistory");
 const reviewStatus = document.getElementById("reviewStatus");
 const terminalOutput = document.getElementById("terminalOutput");
@@ -51,6 +49,60 @@ function normalizeAnswerText(text) {
     const trimmed = text.trim();
     const match = trimmed.match(/^```(?:markdown|md)?\n([\s\S]*?)\n```$/i);
     return match ? match[1].trim() : text;
+}
+
+function summarizeHistoryMessage(content) {
+    const normalized = (content || "").trim();
+    if (!normalized) {
+        return "";
+    }
+
+    const compacted = normalized.replace(/```[^\n]*\n[\s\S]*?(?:```|$)/g, (block) => {
+        const lines = block.replace(/\r\n/g, "\n").split("\n");
+        const language = lines[0].replace("```", "").trim() || "code";
+        const hasClosingFence = lines[lines.length - 1]?.trim() === "```";
+        const lineCount = Math.max(0, hasClosingFence ? lines.length - 2 : lines.length - 1);
+        return `[${language} code block omitted from history, ${lineCount} lines]`;
+    });
+
+    const flattened = compacted.replace(/\s+/g, " ").trim();
+    if (flattened.length > 700) {
+        return `${flattened.slice(0, 700).trimEnd()} ...[history trimmed]`;
+    }
+    return flattened;
+}
+
+function buildHistoryPayload(history) {
+    return history
+        .slice(-6)
+        .map((message) => ({
+            role: message.role,
+            content: summarizeHistoryMessage(message.content),
+        }))
+        .filter((message) => message.content);
+}
+
+function estimatePayloadBytes(payload) {
+    return new Blob([JSON.stringify(payload)]).size;
+}
+
+function inferLanguageFromCode(code) {
+    const snippet = (code || "").trim();
+    if (!snippet) {
+        return "python";
+    }
+
+    const lower = snippet.toLowerCase();
+    if (snippet.includes("#include") || snippet.includes("using namespace std") || /\bstd::/.test(snippet)) {
+        return "cpp";
+    }
+    if (/\bpublic\s+class\b/.test(snippet) || /\bpublic\s+static\s+void\s+main\b/.test(snippet)) {
+        return "java";
+    }
+    if (/\b(function|const|let|var)\b/.test(lower) || snippet.includes("console.log(") || snippet.includes("=>")) {
+        return "javascript";
+    }
+    return "python";
 }
 
 function lineIsBullet(line) {
@@ -352,7 +404,7 @@ function updateReplyPreview() {
     if (!state.lastAnswer) {
         const emptyState = document.createElement("div");
         emptyState.className = "empty-state";
-        emptyState.innerHTML = "<h3>No Reply Yet</h3><p>Generate a review and it will appear here with headings, cards, lists, and code blocks.</p>";
+        emptyState.innerHTML = "<h3>No Reply Yet</h3><p>Send a message and the AI reply will appear here with headings, cards, lists, and code blocks.</p>";
         replyPreview.appendChild(emptyState);
         return;
     }
@@ -365,22 +417,22 @@ function updateReplyPreview() {
     );
 }
 
-function setAction(nextAction) {
-    state.action = nextAction;
-    document.querySelectorAll(".action-btn").forEach((button) => {
-        button.classList.toggle("active", button.dataset.action === nextAction);
-    });
-}
-
 async function postJson(url, payload) {
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCookie("csrftoken"),
-        },
-        body: JSON.stringify(payload),
-    });
+    let response;
+    try {
+        response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+            },
+            body: JSON.stringify(payload),
+        });
+    } catch (error) {
+        throw new Error(
+            "Could not reach the server. If this happens only for large code, clear old chat history or send a smaller chunk first."
+        );
+    }
 
     const contentType = response.headers.get("content-type") || "";
     if (contentType.includes("application/json")) {
@@ -392,7 +444,48 @@ async function postJson(url, payload) {
     }
 
     if (!response.ok) {
-        throw new Error("Request failed.");
+        const text = await response.text();
+        throw new Error(text.trim() || "Request failed.");
+    }
+
+    return response;
+}
+
+async function postForPdf(url, payload) {
+    let response;
+    try {
+        response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCookie("csrftoken"),
+                "Accept": "application/pdf",
+            },
+            body: JSON.stringify(payload),
+        });
+    } catch (error) {
+        throw new Error("Could not reach the server while creating the PDF.");
+    }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (contentType.includes("application/json")) {
+        const data = await response.json();
+        throw new Error(data.error || "PDF export failed.");
+    }
+
+    if (!response.ok) {
+        if (contentType.includes("text/html")) {
+            throw new Error("Server returned an HTML error page instead of a PDF. Restart the server and try again.");
+        }
+        const text = await response.text();
+        throw new Error(text.trim() || "PDF export failed.");
+    }
+
+    if (!contentType.includes("application/pdf")) {
+        if (contentType.includes("text/html")) {
+            throw new Error("Server returned an HTML page instead of a PDF. Restart the server and try again.");
+        }
+        throw new Error("PDF export did not return a PDF file.");
     }
 
     return response;
@@ -401,29 +494,40 @@ async function postJson(url, payload) {
 async function sendForReview() {
     const prompt = promptInput.value.trim();
     const code = codeEditor.value.trim();
+    const language = inferLanguageFromCode(code);
 
     if (!code) {
         setStatus("Paste code into the editor first.");
         return;
     }
 
-    addMessage("user", prompt || `Run ${state.action} on my current code.`);
+    addMessage("user", prompt || "Help me with my current code.");
     state.history.push({
         role: "user",
-        content: prompt || `Run ${state.action} on my current code.`,
+        content: prompt || "Help me with my current code.",
     });
 
     setStatus("Review in progress...");
 
     try {
-        const data = await postJson("/api/review/", {
-            action: state.action,
+        const payload = {
+            action: "chat",
             prompt,
             code,
             model: modelSelect.value,
-            language: languageSelect.value,
-            history: state.history,
-        });
+            language,
+            history: buildHistoryPayload(state.history),
+        };
+
+        if (estimatePayloadBytes(payload) > 1_500_000 && payload.history.length) {
+            payload.history = [];
+        }
+
+        if (estimatePayloadBytes(payload) > 8_000_000) {
+            throw new Error("This code is too large for one request. Split it into smaller files or smaller sections.");
+        }
+
+        const data = await postJson("/api/review/", payload);
 
         state.lastAnswer = data.answer;
         state.lastModel = data.model;
@@ -452,8 +556,9 @@ async function runCode() {
     setSideView("terminal");
 
     try {
+        const language = inferLanguageFromCode(codeEditor.value);
         const data = await postJson("/api/run/", {
-            language: languageSelect.value,
+            language,
             code: codeEditor.value,
         });
         terminalOutput.textContent = data.output;
@@ -473,10 +578,11 @@ async function downloadPdf() {
     setStatus("Creating PDF...");
 
     try {
-        const response = await postJson("/api/report/pdf/", {
+        const language = inferLanguageFromCode(codeEditor.value);
+        const response = await postForPdf("/api/report/pdf/", {
             title: "Code Review Report",
-            action: state.action,
-            language: languageSelect.value,
+            action: "AI Chat",
+            language,
             answer: state.lastAnswer,
             code: codeEditor.value,
         });
@@ -509,14 +615,9 @@ function loadSampleCode() {
     return -1
 
 print(binary_search([2, 4, 7, 9, 13], 13))`;
-    promptInput.value = "Create a report for this code and explain the bug simply.";
-    setAction("create_report");
+    promptInput.value = "Explain the bug simply and give the full corrected code.";
     setStatus("Sample loaded.");
 }
-
-document.querySelectorAll(".action-btn").forEach((button) => {
-    button.addEventListener("click", () => setAction(button.dataset.action));
-});
 
 document.getElementById("sendBtn").addEventListener("click", sendForReview);
 document.getElementById("runBtn").addEventListener("click", runCode);

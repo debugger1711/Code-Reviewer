@@ -42,6 +42,7 @@ class ReviewService:
 
         client = genai.Client(api_key=api_key)
         selected_model = model if model in settings.GEMINI_MODELS else settings.GEMINI_DEFAULT_MODEL
+        code_request = self._is_code_request(action=action, prompt=prompt)
         prompt_body = self._build_user_prompt(
             code=code,
             action=action,
@@ -76,14 +77,15 @@ class ReviewService:
         if not answer:
             answer = self._flatten_response(response)
 
-        if self._is_code_request(action=action, prompt=prompt) and not self._has_nonempty_code_block(answer):
-            repaired_answer = self._repair_missing_code_block(
+        if code_request and self._code_response_needs_repair(response=response, answer=answer):
+            repaired_answer = self._repair_incomplete_code_answer(
                 client=client,
                 types_module=types,
                 model=selected_model,
                 prompt=prompt,
                 code=code,
                 language=language,
+                partial_answer=answer,
             )
             if repaired_answer:
                 answer = repaired_answer
@@ -123,7 +125,8 @@ class ReviewService:
             Never create dangling headings or unfinished sentences.
             Never say you converted or fixed code unless you include the code block in the same reply.
             If code is requested, return the full answer with result, code, and short explanation.
-            Never add comments inside code unless the user explicitly asks for comments.
+            Default to comment-free code in every fenced code block.
+            Unless the user explicitly asks for comments, do not include inline comments, block comments, docstrings, or commented examples inside the code.
             When rewriting or converting code, do not preserve old comments unless the user explicitly asks for that.
             Never wrap the whole response in ```markdown fences.
             """
@@ -226,7 +229,8 @@ class ReviewService:
                 Rules:
                 - Return the full code, not a partial snippet
                 - Do not leave the code block empty
-                - Do not add comments inside the code unless the user explicitly asked for comments
+                - Return comment-free code by default
+                - Do not add inline comments, block comments, or docstrings inside the code unless the user explicitly asked for comments
                 - Preserve behavior unless the user explicitly asked for a fix or optimization
                 - If the requested language is C++, use #include <bits/stdc++.h> and using namespace std;
                 """
@@ -247,8 +251,12 @@ class ReviewService:
 
     def _max_output_tokens(self, action: str, prompt: str, code: str) -> int:
         if self._is_code_request(action=action, prompt=prompt):
-            estimated = max(2200, min(5000, 1600 + len(code)))
-            return estimated
+            code_tokens = self._rough_token_count(code)
+            prompt_tokens = self._rough_token_count(prompt)
+            estimated = 2600 + (code_tokens * 2) + prompt_tokens
+            if any(keyword in (prompt or "").lower() for keyword in ["full code", "complete code", "entire code"]):
+                estimated += 1200
+            return max(4096, min(8192, estimated))
 
         if action == "chat":
             return 900
@@ -317,6 +325,16 @@ class ReviewService:
         code_blocks = re.findall(r"```[^\n]*\n([\s\S]*?)```", text or "")
         return any(block.strip() for block in code_blocks)
 
+    def _has_unclosed_code_block(self, text: str) -> bool:
+        return (text or "").count("```") % 2 == 1
+
+    def _code_response_needs_repair(self, *, response: object, answer: str) -> bool:
+        if not self._has_nonempty_code_block(answer):
+            return True
+        if self._has_unclosed_code_block(answer):
+            return True
+        return self._response_was_cut_off(response)
+
     def _normalize_cpp_answer(self, answer: str) -> str:
         match = re.search(r"```([^\n]*)\n([\s\S]*?)```", answer)
         if not match:
@@ -349,7 +367,7 @@ class ReviewService:
         cleaned_lines = [re.sub(r"//.*$", "", line).rstrip() for line in code.splitlines()]
         return "\n".join(cleaned_lines)
 
-    def _repair_missing_code_block(
+    def _repair_incomplete_code_answer(
         self,
         *,
         client: object,
@@ -358,11 +376,12 @@ class ReviewService:
         prompt: str,
         code: str,
         language: str,
+        partial_answer: str,
     ) -> str:
         target_language = self._target_language(prompt=prompt, fallback=language)
         repair_prompt = dedent(
             f"""
-            The last answer missed the actual code body.
+            The last answer was incomplete, cut off, or missing code.
             Return a corrected full answer using exactly this format:
             ## Result
             one short sentence
@@ -374,10 +393,16 @@ class ReviewService:
             1-3 short bullets
 
             Rules:
+            - Return the whole answer again from scratch, not a continuation fragment
             - The code block must be complete and non-empty
-            - Do not add comments inside the code unless the user explicitly asked for comments
+            - Close the code fence properly
+            - Return comment-free code by default
+            - Do not add inline comments, block comments, or docstrings inside the code unless the user explicitly asked for comments
             - If the requested language is C++, use #include <bits/stdc++.h> and using namespace std;
             Preserve the original program behavior unless the user explicitly asked for a fix or optimization.
+
+            Previous partial answer:
+            {partial_answer or "[empty answer]"}
 
             User request:
             {prompt}
@@ -396,16 +421,16 @@ class ReviewService:
                 config=types_module.GenerateContentConfig(
                     system_instruction=(
                         "Return a corrected full answer with one complete non-empty fenced code block "
-                        "and no comments inside the code unless explicitly asked."
+                        "and comment-free code unless the user explicitly asked for comments."
                     ),
-                    max_output_tokens=max(2600, min(6000, 2200 + len(code))),
+                    max_output_tokens=max(5000, self._max_output_tokens("chat", prompt, code)),
                 ),
             )
         except Exception:
             return ""
 
         answer = getattr(response, "text", "").strip() or self._flatten_response(response)
-        return answer if self._has_nonempty_code_block(answer) else ""
+        return answer if not self._code_response_needs_repair(response=response, answer=answer) else ""
 
     def _format_history(self, history: list[dict[str, str]]) -> str:
         if not history:
@@ -414,10 +439,46 @@ class ReviewService:
         lines: list[str] = []
         for message in history[-8:]:
             role = message.get("role", "user").title()
-            content = message.get("content", "").strip()
+            content = self._summarize_history_content(message.get("content", ""))
             if content:
                 lines.append(f"{role}: {content}")
         return "\n".join(lines) if lines else "No previous conversation."
+
+    def _summarize_history_content(self, content: str) -> str:
+        normalized = (content or "").strip()
+        if not normalized:
+            return ""
+
+        normalized = re.sub(
+            r"```[^\n]*\n[\s\S]*?(?:```|$)",
+            self._replace_history_code_block,
+            normalized,
+        )
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        if len(normalized) > 700:
+            return f"{normalized[:700].rstrip()} ...[history trimmed]"
+        return normalized
+
+    def _replace_history_code_block(self, match: re.Match[str]) -> str:
+        block = match.group(0)
+        lines = block.splitlines()
+        language = lines[0].replace("```", "").strip() or "code"
+        content_line_count = len(lines) - 2 if lines and lines[-1].strip() == "```" else len(lines) - 1
+        line_count = max(0, content_line_count)
+        return f"[{language} code block omitted from history, {line_count} lines]"
+
+    def _response_was_cut_off(self, response: object) -> bool:
+        for candidate in getattr(response, "candidates", []) or []:
+            finish_reason = getattr(candidate, "finish_reason", None)
+            if finish_reason is None:
+                continue
+            reason_text = getattr(finish_reason, "name", str(finish_reason)).lower()
+            if "max" in reason_text and "token" in reason_text:
+                return True
+        return False
+
+    def _rough_token_count(self, text: str) -> int:
+        return max(1, (len(text or "") + 3) // 4)
 
     def _flatten_response(self, response: object) -> str:
         parts: list[str] = []
