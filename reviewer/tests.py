@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import PropertyMock
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest
 from django.test import Client, RequestFactory, TestCase
@@ -20,6 +21,24 @@ class ReviewerViewTests(TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Code Reviewer")
+
+    def test_account_login_page_uses_custom_theme(self) -> None:
+        response = self.client.get("/accounts/login/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "reviewer/auth.css")
+        self.assertContains(response, "Code Reviewer Studio")
+
+    def test_account_logout_page_uses_custom_theme(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="testuser",
+            email="test@example.com",
+            password="strong-pass-123",
+        )
+        self.client.force_login(user)
+        response = self.client.get("/accounts/logout/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "reviewer/auth.css")
+        self.assertContains(response, "Manage Account")
 
     @patch("reviewer.views.ReviewService.review_code")
     def test_review_endpoint_returns_json(self, mocked_review) -> None:
