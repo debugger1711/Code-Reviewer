@@ -34,11 +34,15 @@ GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 def csv_env(name: str) -> list[str]:
     return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
 
-ALLOWED_HOSTS = [
+ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS") + [
     ".vercel.app",
     "localhost",
     "127.0.0.1",
-    "*", # Wildcard ensures dynamically generated preview URLs work
+    "*", 
+]
+
+CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS") + [
+    "https://*.vercel.app",
 ]
 
 INSTALLED_APPS = [
@@ -128,9 +132,10 @@ USE_I18N = True
 USE_TZ = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "reviewer" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
