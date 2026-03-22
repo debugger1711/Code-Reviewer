@@ -1,18 +1,14 @@
 {
-  "version": 2,
   "builds": [
     {
-      "src": "codereviewer/wsgi.py",
-      "use": "@vercel/python",
-      "config": {
-        "maxDuration": 60
-      }
+      "src": "api/index.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "codereviewer/wsgi.py"
+      "dest": "api/index.py"
     }
   ]
 }
