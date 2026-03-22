@@ -129,8 +129,6 @@ USE_TZ = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
-import os
-os.makedirs(STATIC_ROOT, exist_ok=True)
 STATICFILES_DIRS = [BASE_DIR / "reviewer" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
