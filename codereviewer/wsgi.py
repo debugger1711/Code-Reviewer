@@ -16,3 +16,4 @@ if user_site and user_site not in sys.path:
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "codereviewer.settings")
 
 application = get_wsgi_application()
+app = application
