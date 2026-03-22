@@ -34,15 +34,15 @@ GOOGLE_OAUTH_SECRET = os.environ.get("GOOGLE_OAUTH_SECRET", "").strip()
 def csv_env(name: str) -> list[str]:
     return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
 
-ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS") or [
-    "code-review-tau-ebon.vercel.app",
+ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS") + [
     ".vercel.app",
     "localhost",
     "127.0.0.1",
+    "*", # Wildcard ensures dynamically generated preview URLs work
 ]
 
-CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS") or [
-    "https://code-review-tau-ebon.vercel.app",
+CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_CSRF_TRUSTED_ORIGINS") + [
+    "https://*.vercel.app",
 ]
 
 INSTALLED_APPS = [
@@ -132,7 +132,9 @@ USE_I18N = True
 USE_TZ = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+import os
+os.makedirs(STATIC_ROOT, exist_ok=True)
 STATICFILES_DIRS = [BASE_DIR / "reviewer" / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
